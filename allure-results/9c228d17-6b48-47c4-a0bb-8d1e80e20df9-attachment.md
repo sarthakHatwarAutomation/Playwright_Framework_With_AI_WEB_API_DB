@@ -1,0 +1,187 @@
+# Instructions
+
+- Following Playwright test failed.
+- Explain why, be concise, respect Playwright best practices.
+- Provide a snippet of code with the fix, if possible.
+
+# Test info
+
+- Name: api\fakestore-api.spec.ts >> FakeStore API Tests >> POST - Invalid login @master @api
+- Location: tests\api\fakestore-api.spec.ts:59:3
+
+# Error details
+
+```
+SyntaxError: Unexpected token 'u', "username o"... is not valid JSON
+```
+
+# Test source
+
+```ts
+  1   | import { Ajv, type ValidateFunction } from "ajv";
+  2   | import { test, expect } from "@playwright/test";
+  3   | import dotenv from "dotenv";
+  4   | import { Routes } from "../../api/endpoints/routes.js";
+  5   | import { DataProvider } from "../../utils/DataReader.js";
+  6   | import { RandomDataUtil } from "../../utils/dataGenerator.js";
+  7   | 
+  8   | dotenv.config();
+  9   | 
+  10  | const BASE_URL = (process.env.API_BASE_URL || Routes.BASE_URL).replace(/\/$/, "");
+  11  | const PRODUCT_ID = Number(process.env.PRODUCT_ID || "1");
+  12  | const USER_ID = Number(process.env.USER_ID || "1");
+  13  | const CART_ID = Number(process.env.CART_ID || "1");
+  14  | const LIMIT = Number(process.env.LIMIT || "3");
+  15  | const START_DATE = process.env.START_DATE || "2019-12-10";
+  16  | const END_DATE = process.env.END_DATE || "2020-10-10";
+  17  | const ajv = new Ajv();
+  18  | 
+  19  | function routeWithId(route: string, id: number): string {
+  20  |   return route.replace("{id}", String(id));
+  21  | }
+  22  | 
+  23  | function routeWithLimit(route: string, limit: number): string {
+  24  |   return route.replace("{limit}", String(limit));
+  25  | }
+  26  | 
+  27  | function routeWithSort(route: string, order: "asc" | "desc"): string {
+  28  |   return route.replace("{order}", order);
+  29  | }
+  30  | 
+  31  | function expectSchema(
+  32  |   validator: ValidateFunction,
+  33  |   responseBody: unknown,
+  34  |   schemaName: string,
+  35  | ): void {
+  36  |   const isValid = validator(responseBody);
+  37  |   expect(
+  38  |     isValid,
+  39  |     `${schemaName} response schema validation failed: ${ajv.errorsText(validator.errors)}`,
+  40  |   ).toBe(true);
+  41  | }
+  42  | 
+  43  | test.describe("FakeStore API Tests", () => {
+  44  |   test("POST - Successful login @master @sanity @api", async ({ request }) => {
+  45  |     const response = await request.post(`${BASE_URL}${Routes.AUTH_LOGIN}`, {
+  46  |       data: {
+  47  |         username: process.env.USERNAME,
+  48  |         password: process.env.PASSWORD,
+  49  |       },
+  50  |     });
+  51  | 
+  52  |     expect(response.status(), "A valid login should return status 201").toBe(201);
+  53  |     const body = await response.json();
+  54  |     expect(body).toHaveProperty("token");
+  55  |     expect(typeof body.token).toBe("string");
+  56  |     expect(body.token.length, "The authentication token should not be empty").toBeGreaterThan(0);
+  57  |   });
+  58  | 
+  59  |   test("POST - Invalid login @master @api", async ({ request }) => {
+  60  |     const response = await request.post(`${BASE_URL}${Routes.AUTH_LOGIN}`, {
+  61  |       data: RandomDataUtil.generateInvalidLoginPayload(),
+  62  |     });
+  63  | 
+  64  |     expect(response.status(), "An invalid login should return status 401").toBe(401);
+> 65  |     const body = await response.json();
+      |                  ^ SyntaxError: Unexpected token 'u', "username o"... is not valid JSON
+  66  |     expect(body).toHaveProperty("message", "username or password is incorrect");
+  67  |   });
+  68  | 
+  69  |   test("GET - All products @master @sanity @api", async ({ request }) => {
+  70  |     const response = await request.get(`${BASE_URL}${Routes.GET_ALL_PRODUCTS}`);
+  71  |     expect(response.status()).toBe(200);
+  72  | 
+  73  |     const products = await response.json();
+  74  |     expect(Array.isArray(products), "Products response should be an array").toBe(true);
+  75  |     expect(products.length, "At least one product should be returned").toBeGreaterThan(0);
+  76  |     for (const product of products) {
+  77  |       expect(product).toEqual(
+  78  |         expect.objectContaining({
+  79  |           id: expect.any(Number),
+  80  |           title: expect.any(String),
+  81  |           price: expect.any(Number),
+  82  |           category: expect.any(String),
+  83  |           image: expect.any(String),
+  84  |         }),
+  85  |       );
+  86  |     }
+  87  |   });
+  88  | 
+  89  |   test("GET - Product by ID @master @api", async ({ request }) => {
+  90  |     const response = await request.get(
+  91  |       `${BASE_URL}${routeWithId(Routes.GET_PRODUCT_BY_ID, PRODUCT_ID)}`,
+  92  |     );
+  93  |     expect(response.status()).toBe(200);
+  94  | 
+  95  |     const product = await response.json();
+  96  |     expect(product.id).toBe(PRODUCT_ID);
+  97  |     expect(product).toEqual(
+  98  |       expect.objectContaining({
+  99  |         title: expect.any(String),
+  100 |         price: expect.any(Number),
+  101 |         category: expect.any(String),
+  102 |         image: expect.any(String),
+  103 |       }),
+  104 |     );
+  105 |   });
+  106 | 
+  107 |   test("GET - Products with limit @master @api", async ({ request }) => {
+  108 |     const response = await request.get(
+  109 |       `${BASE_URL}${routeWithLimit(Routes.GET_PRODUCTS_WITH_LIMIT, LIMIT)}`,
+  110 |     );
+  111 |     expect(response.status()).toBe(200);
+  112 | 
+  113 |     const products = await response.json();
+  114 |     expect(Array.isArray(products)).toBe(true);
+  115 |     expect(products.length, "Product count should match the requested limit").toBe(LIMIT);
+  116 |   });
+  117 | 
+  118 |   test("GET - Products sorted ascending @master @api", async ({ request }) => {
+  119 |     const route = routeWithSort(Routes.GET_PRODUCTS_SORTED, "asc");
+  120 |     const response = await request.get(`${BASE_URL}${route}`);
+  121 |     expect(response.status()).toBe(200);
+  122 | 
+  123 |     const products = await response.json();
+  124 |     const ids = products.map((product: { id: number }) => product.id);
+  125 |     expect(ids).toEqual([...ids].sort((a: number, b: number) => a - b));
+  126 |   });
+  127 | 
+  128 |   test("GET - Products sorted descending @master @api", async ({ request }) => {
+  129 |     const route = routeWithSort(Routes.GET_PRODUCTS_SORTED, "desc");
+  130 |     const response = await request.get(`${BASE_URL}${route}`);
+  131 |     expect(response.status()).toBe(200);
+  132 | 
+  133 |     const products = await response.json();
+  134 |     const ids = products.map((product: { id: number }) => product.id);
+  135 |     expect(ids).toEqual([...ids].sort((a: number, b: number) => b - a));
+  136 |   });
+  137 | 
+  138 |   test("GET - All product categories @master @api", async ({ request }) => {
+  139 |     const response = await request.get(`${BASE_URL}${Routes.GET_ALL_CATEGORIES}`);
+  140 |     expect(response.status()).toBe(200);
+  141 | 
+  142 |     const categories = await response.json();
+  143 |     expect(Array.isArray(categories)).toBe(true);
+  144 |     expect(categories.length, "At least one category should be returned").toBeGreaterThan(0);
+  145 |   });
+  146 | 
+  147 |   test("GET - Products by category @master @api", async ({ request }) => {
+  148 |     const category = "electronics";
+  149 |     const route = Routes.GET_PRODUCTS_BY_CATEGORY.replace("{category}", category);
+  150 |     const response = await request.get(`${BASE_URL}${route}`);
+  151 |     expect(response.status()).toBe(200);
+  152 | 
+  153 |     const products = await response.json();
+  154 |     expect(Array.isArray(products)).toBe(true);
+  155 |     expect(products.length, "The valid category should contain products").toBeGreaterThan(0);
+  156 |     for (const product of products) {
+  157 |       expect(product.category, "Each product should belong to the requested category").toBe(
+  158 |         category,
+  159 |       );
+  160 |     }
+  161 |   });
+  162 | 
+  163 |   test("POST - Create product @master @regression @api", async ({ request }) => {
+  164 |     const payload = RandomDataUtil.generateProductPayload();
+  165 |     const response = await request.post(`${BASE_URL}${Routes.CREATE_PRODUCT}`, { data: payload });
+```
